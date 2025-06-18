@@ -2376,6 +2376,24 @@ class Script:
         else:
             fp.write(u"XDIR=\"`pwd`/{dir}\"\n".format(dir = self.opts.xml_dir))
 
+        if self.opts.green != "":
+            fp.write(u'''
+max_ci=10
+waited=0
+ci=`curl -X GET https://api.carbonintensity.org.uk/regional/postcode/{pc} -s -H 'Accept: application/json' | jq '.data[0].data[0].intensity.forecast'`
+while [[ "$ci" -gt "$max_ci" ]]
+do
+    sleep 60
+    waited=`expr 60 + $waited`
+    rnd=`expr $RANDOM % 180`
+    sleep $rnd
+    waited=`expr $rnd + $waited`
+    ci=`curl -X GET https://api.carbonintensity.org.uk/regional/postcode/{pc} -s -H 'Accept: application/json' | jq '.data[0].data[0].intensity.forecast'`
+    max_ci=`expr 1 + $max_ci`
+done
+echo "Waited $waited seconds until carbon intensity $ci at {pc} is no more than $max_ci"
+''').format(pc = self.opts.green)
+
         fp.write(u'''
 export JAVA_HOME="{java_home}"
 cd "{nlogo_home}"
@@ -2702,6 +2720,9 @@ class Option:
         Option("go", "use the given code as the go command rather than whatever " +
             "is found in the go button (monte-carlo experiments only)", "", args = ["code"],
             cmd = ["montq", "monte"])
+        Option("green", "use the regional carbon intensity API to wait to run your " +
+            "model until the carbon intensity is very low (less than 30 g/kWh) ", "",
+            args = ["outcode (first part of postcode)"], cmd = Option.scriptCmds())
         Option("help", "print this message and exit", False, short_name = "h")
         Option("headless", "use the default netlogo-headless.sh to invoke NetLogo",
             False, cmd = Option.scriptCmds(), short_name = "H")
@@ -2823,6 +2844,7 @@ class Options:
         self.nlogo_home = Option.get("find-netlogo").valueStr()
         self.gigaram = int(Option.get("gibibytes").valueStr())
         self.go = Option.get("go").valueStr()
+        self.green = Option.get("green").valueStr()
         self.user_go = Option.assigned("go")
         self.limit_ram = not Option.getFlag("no-limit-ram")
         if Option.getFlag("headless"):
